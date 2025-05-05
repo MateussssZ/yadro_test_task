@@ -1,7 +1,6 @@
 package loghandler
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -17,7 +16,7 @@ var mapEvents = map[int]string{
 	3:  "The competitor(%d) is on the start line",
 	4:  "The competitor(%d) has started",
 	5:  "The competitor(%d) is on the firing range(%s)",
-	6:  "The target(%d) has been hit by competitor(%s)",
+	6:  "The target(%s) has been hit by competitor(%d)",
 	7:  "The competitor(%d) left the firing range",
 	8:  "The competitor(%d) entered the penalty laps",
 	9:  "The competitor(%d) left the penalty laps",
@@ -32,18 +31,8 @@ type EventInfo struct {
 	EventTime    time.Time
 }
 
-type CustomHandler struct {
-	slog.Handler
-	logFile *os.File
-}
-
 type CustomLogger struct {
 	l *slog.Logger
-}
-
-func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
-	_, err := h.logFile.WriteString(r.Message + "\n")
-	return err
 }
 
 func NewCustomLogger(logFile *os.File) *CustomLogger {
@@ -74,7 +63,7 @@ func (cl CustomLogger) ProcessLine(line string) EventInfo {
 		extraParams = strings.Join(parts[3:], " ")
 	}
 
-	msg := buildLogMessage(time, competitorIdStr, eventId, extraParams)
+	msg := buildLogMessage(time, competitorId, eventId, extraParams)
 	cl.l.Info(msg)
 
 	time = strings.Trim(time, "[]")
@@ -86,11 +75,13 @@ func (cl CustomLogger) ProcessLine(line string) EventInfo {
 	}
 }
 
-func buildLogMessage(time, competitorId string, eventId int, extraParams string) string {
+func buildLogMessage(time string, competitorId, eventId int, extraParams string) string {
 	var eventMsg string
 	switch eventId {
-	case 2, 5, 6, 11:
+	case 2, 5, 11:
 		eventMsg = fmt.Sprintf(mapEvents[eventId], competitorId, extraParams)
+	case 6:
+		eventMsg = fmt.Sprintf(mapEvents[eventId], extraParams, competitorId)
 	default:
 		eventMsg = fmt.Sprintf(mapEvents[eventId], competitorId)
 	}

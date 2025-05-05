@@ -6,6 +6,7 @@ import (
 	"time"
 	"yadro_test/internal/cfg"
 	lh "yadro_test/internal/logger"
+	"yadro_test/pkg/utils"
 )
 
 type CompetitionManager struct {
@@ -39,7 +40,11 @@ func NewCompetitionManager(outFile *os.File, cfg *cfg.Config) *CompetitionManage
 func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) {
 	switch eventInfo.EventId {
 	case 1:
-		cm.competitors[eventInfo.CompetitorId] = Competitor{}
+		cm.competitors[eventInfo.CompetitorId] = Competitor{
+			lapTimes:  make([]time.Duration, 0),
+			lapSpeeds: make([]float64, 0),
+			hits:      map[byte]bool{},
+		}
 	case 2:
 		competitor := cm.competitors[eventInfo.CompetitorId]
 
@@ -55,9 +60,10 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) {
 		competitor := cm.competitors[eventInfo.CompetitorId]
 
 		diff := eventInfo.EventTime.Sub(competitor.LastLapTime)
-		if diff > cm.cfg.StartDelta {
+		startDeltaDur := utils.ConvertStringToDuration(cm.cfg.StartDelta)
+		if diff > startDeltaDur {
 			competitor.Status = "NotStarted"
-			competitor.TotalTime = cm.cfg.StartDelta
+			competitor.TotalTime = startDeltaDur
 		}
 	case 5:
 		return
