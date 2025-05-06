@@ -111,7 +111,6 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 		if competitor.LapsEnded == uint(cm.cfg.Laps)-1 {
 			competitor.Status = "Finished"
 			competitor.TotalTime = calculateTotalTime(competitor.StartTime, competitor.LapTimes)
-			competitor.LapsEnded += 1
 		} else if competitor.LapsEnded == uint(cm.cfg.Laps) {
 			return fmt.Errorf("competitor ended more laps than needed")
 		}

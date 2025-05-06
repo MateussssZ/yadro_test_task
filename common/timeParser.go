@@ -2,7 +2,6 @@ package timeParser
 
 import (
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -17,8 +16,7 @@ func ConvertStringToTime(t string) (time.Time, error) {
 func ConvertStringToDuration(t string) (time.Duration, error) {
 	parsed, err := time.Parse("15:04:05", t)
 	if err != nil {
-		log.Fatalf("unable to parse time.Duration(%s)", t)
-		return 0, err
+		return 0, fmt.Errorf("unable to parse time.Duration(%s)", t)
 	}
 	return time.Duration(parsed.Hour())*time.Hour +
 		time.Duration(parsed.Minute())*time.Minute +
