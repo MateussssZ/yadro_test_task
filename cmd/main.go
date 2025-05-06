@@ -36,7 +36,13 @@ func main() {
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
 		line := scanner.Text()
-		eventInfo := l.ProcessLine(line)
-		cmptMgr.HandleEvent(eventInfo)
+		eventInfo, err := l.ProcessLine(line)
+		if err != nil {
+			log.Fatalf("LogHandler error: %v", err)
+		}
+		err = cmptMgr.HandleEvent(eventInfo)
+		if err != nil {
+			log.Fatalf("CompetitorManager error: %v", err)
+		}
 	}
 }

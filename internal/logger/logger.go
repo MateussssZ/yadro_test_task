@@ -2,12 +2,12 @@ package loghandler
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+	timeParser "yadro_test/common"
 )
 
 var mapEvents = map[int]string{
@@ -23,6 +23,8 @@ var mapEvents = map[int]string{
 	10: "The competitor(%d) ended the main lap",
 	11: "The competitor(%d) can`t continue: %s",
 }
+
+const numReqParams = 3
 
 type EventInfo struct {
 	EventId      int
@@ -41,38 +43,40 @@ func NewCustomLogger(logFile *os.File) *CustomLogger {
 	}
 }
 
-func (cl CustomLogger) ProcessLine(line string) EventInfo {
+func (cl CustomLogger) ProcessLine(line string) (EventInfo, error) {
 	line = strings.TrimSpace(line)
 	parts := strings.Split(line, " ")
-	if len(parts) < 3 {
-		log.Fatalf("insufficient number of parameters in line (%s)", line)
+	if len(parts) < numReqParams {
+		return EventInfo{}, fmt.Errorf("insufficient number of parameters in line (%s)", line)
 	}
 
 	time, eventIdStr, competitorIdStr := parts[0], parts[1], parts[2]
 	eventId, err := strconv.Atoi(eventIdStr)
 	if err != nil {
-		log.Fatalf("can`t convert eventId(%s) to int", eventIdStr)
+		return EventInfo{}, fmt.Errorf("can`t convert eventId(%s) to int", eventIdStr)
 	}
 	competitorId, err := strconv.Atoi(competitorIdStr)
 	if err != nil {
-		log.Fatalf("can`t convert competitorId(%s) to int", competitorIdStr)
+		return EventInfo{}, fmt.Errorf("can`t convert competitorId(%s) to int", competitorIdStr)
 	}
-
 	var extraParams string
-	if len(parts) > 3 {
-		extraParams = strings.Join(parts[3:], " ")
+	if len(parts) > numReqParams {
+		extraParams = strings.Join(parts[numReqParams:], " ")
 	}
 
 	msg := buildLogMessage(time, competitorId, eventId, extraParams)
 	cl.l.Info(msg)
 
-	time = strings.Trim(time, "[]")
+	eventTime, err := timeParser.ConvertStringToTime(strings.Trim(time, "[]"))
+	if err != nil {
+		return EventInfo{}, err
+	}
 	return EventInfo{
 		EventId:      eventId,
 		CompetitorId: competitorId,
-		EventTime:    convertStringToTime(time),
+		EventTime:    eventTime,
 		ExtraParams:  extraParams,
-	}
+	}, nil
 }
 
 func buildLogMessage(time string, competitorId, eventId int, extraParams string) string {
@@ -85,14 +89,5 @@ func buildLogMessage(time string, competitorId, eventId int, extraParams string)
 	default:
 		eventMsg = fmt.Sprintf(mapEvents[eventId], competitorId)
 	}
-
 	return fmt.Sprintf("%s %s", time, eventMsg)
-}
-
-func convertStringToTime(t string) time.Time {
-	time, err := time.Parse("15:04:05.000", t)
-	if err != nil {
-		log.Fatalf("unable to parse time(%s)", t)
-	}
-	return time
 }
