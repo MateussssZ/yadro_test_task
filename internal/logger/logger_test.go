@@ -22,7 +22,7 @@ func TestNewCustomLogger(t *testing.T) {
 	}
 }
 
-func TestProcessLine_ValidInput(t *testing.T) {
+func TestProcessLineValidInput(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -92,7 +92,7 @@ func TestProcessLine_ValidInput(t *testing.T) {
 	}
 }
 
-func TestProcessLine_InvalidInput(t *testing.T) {
+func TestProcessLineInvalidInput(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string

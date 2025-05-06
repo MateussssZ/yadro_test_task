@@ -11,7 +11,7 @@ import (
 	lh "yadro_test/internal/logger"
 )
 
-func TestHandleEvent_Registration(t *testing.T) {
+func TestHandleEventRegistration(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "testoutput")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -43,7 +43,7 @@ func TestHandleEvent_Registration(t *testing.T) {
 	}
 }
 
-func TestHandleEvent_StartTime(t *testing.T) {
+func TestHandleEventStartTime(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "testoutput")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -87,7 +87,7 @@ func TestHandleEvent_StartTime(t *testing.T) {
 	}
 }
 
-func TestHandleEvent_LapCompletion(t *testing.T) {
+func TestHandleEventLapCompletion(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "testoutput")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -152,7 +152,7 @@ func TestHandleEvent_LapCompletion(t *testing.T) {
 	}
 }
 
-func TestHandleEvent_CompetitionFailing(t *testing.T) {
+func TestHandleEventCompetitionFailing(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "testoutput")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -272,7 +272,7 @@ func TestComputeAvgSpeed(t *testing.T) {
 	}
 }
 
-func TestCountMisses(t *testing.T) {
+func TestCountHits(t *testing.T) {
 	tests := []struct {
 		name     string
 		hits     []bool
@@ -281,7 +281,7 @@ func TestCountMisses(t *testing.T) {
 		{
 			name:     "random slice",
 			hits:     []bool{false, false, true, false, true},
-			expected: 3,
+			expected: 2,
 		},
 		{
 			name:     "empty slice",
@@ -291,13 +291,13 @@ func TestCountMisses(t *testing.T) {
 		{
 			name:     "only true",
 			hits:     []bool{true, true, true, true, true},
-			expected: 0,
+			expected: 5,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ans := countMisses(tt.hits)
+			ans := countHits(tt.hits)
 			if ans != tt.expected {
 				t.Errorf("countMisses() expected=%d, got %d", tt.expected, ans)
 			}

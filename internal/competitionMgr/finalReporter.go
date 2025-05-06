@@ -11,35 +11,37 @@ import (
 )
 
 func (cm CompetitionManager) GenerateReport() error {
-	compSlice := make([]*Competitor, 0)
-	for _, c := range cm.competitors {
-		compSlice = append(compSlice, c)
-	}
-	sort.Slice(compSlice, func(i, j int) bool {
-		return compSlice[i].TotalTime < compSlice[j].TotalTime
-	})
+	compSlice := cm.sortedCompetitors()
 
 	for _, c := range compSlice {
-		penaltyMisses := countMisses(c.Hits)
-		penaltySpeed := computeAvgSpeed(c.PenaltyTime, float64(cm.cfg.PenaltyLen*penaltyMisses))
-		totalTimeStr := formatStatus(c.Status, c.TotalTime)
-		lapsInfo := formatLapsInfo(c.LapTimes, c.LapSpeeds, cm.cfg.Laps)
-		penaltyInfo := formatLapInfo(c.PenaltyTime, penaltySpeed)
-		shots := 5 * cm.cfg.FiringLines
-		hits := shots - penaltyMisses
-		hitsInfo := fmt.Sprintf("%d/%d", hits, shots)
-
-		line := fmt.Sprintf("%s %d %s %s %s\n",
-			totalTimeStr,
-			c.CompetitorId,
-			lapsInfo,
-			penaltyInfo,
-			hitsInfo,
-		)
-		_, err := cm.outputFile.WriteString(line)
+		err := cm.writeCompetitorReport(c)
 		if err != nil {
-			return fmt.Errorf("unable to write report to output file: %v", err)
+			return err
 		}
+	}
+	return nil
+}
+
+func (cm CompetitionManager) writeCompetitorReport(c *Competitor) error {
+	shots := TargetsPerFiringLine * c.FiringRangeNum
+	penaltyHits := countHits(c.Hits)
+	penaltyMisses := shots - penaltyHits
+	penaltySpeed := computeAvgSpeed(c.PenaltyTime, float64(cm.cfg.PenaltyLen*penaltyMisses))
+	totalTimeStr := formatStatus(c.Status, c.TotalTime)
+	lapsInfo := formatLapsInfo(c.LapTimes, c.LapSpeeds, cm.cfg.Laps)
+	penaltyInfo := formatLapInfo(c.PenaltyTime, penaltySpeed)
+	hitsInfo := fmt.Sprintf("%d/%d", penaltyHits, shots)
+
+	line := fmt.Sprintf("%s %d %s %s %s\n",
+		totalTimeStr,
+		c.CompetitorId,
+		lapsInfo,
+		penaltyInfo,
+		hitsInfo,
+	)
+	_, err := cm.outputFile.WriteString(line)
+	if err != nil {
+		return fmt.Errorf("unable to write report to output file: %v", err)
 	}
 	return nil
 }
@@ -51,7 +53,7 @@ func formatStatus(status string, duration time.Duration) string {
 	case "NotFinished":
 		return "[NotFinished]"
 	default:
-		return timeParser.ConvertDurationToString(duration)
+		return fmt.Sprintf("[%s]", timeParser.ConvertDurationToString(duration))
 	}
 }
 
@@ -86,7 +88,17 @@ func computeAvgSpeed(dur time.Duration, distanceMeters float64) float64 {
 	if dur > 0 {
 		speedMps := distanceMeters / dur.Seconds()
 		return speedMps
-	} else {
-		return 0
 	}
+	return 0
+}
+
+func (cm CompetitionManager) sortedCompetitors() []*Competitor {
+	competitors := make([]*Competitor, 0, len(cm.competitors))
+	for _, c := range cm.competitors {
+		competitors = append(competitors, c)
+	}
+	sort.Slice(competitors, func(i, j int) bool {
+		return competitors[i].TotalTime < competitors[j].TotalTime
+	})
+	return competitors
 }
