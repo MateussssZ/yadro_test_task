@@ -20,38 +20,34 @@ type CompetitionManager struct {
 }
 
 type Competitor struct {
-	CompetitorId     int
-	Status           string
-	StartTime        time.Time
+	ReportInfo                 //Тут вся важная инфа, необходимая для построения final report
+	StartTime        time.Time //Менее важные поля, необходимые для вычислений
 	LastLapTime      time.Time
-	TotalTime        time.Duration
-	LapTimes         []time.Duration
-	LapSpeeds        []float64
-	PenaltyTime      time.Duration
-	Hits             []bool
 	LapsEnded        uint
 	PenaltyLapsEnter time.Time
-	FiringRangeNum   int
 }
 
 func NewCompetitionManager(outFile *os.File, cfg *cfg.Config) *CompetitionManager {
 	return &CompetitionManager{
 		outputFile:  outFile,
 		cfg:         cfg,
-		competitors: make(map[int]*Competitor, 0),
+		competitors: make(map[int]*Competitor, 0), //В качестве key будет выступать competitorId. Можно было бы обойтись слайсом, но нет уверенности,
+		// что наши id идут по порядку(и не будет разрывов в номере участников)
 	}
 }
 
 func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
-	switch eventInfo.EventId {
+	switch eventInfo.EventId { //Если участник зарегался - создаём для него структуру и закидываем её в мапу
 	case 1:
 		cm.competitors[eventInfo.CompetitorId] = &Competitor{
-			CompetitorId: eventInfo.CompetitorId,
-			LapTimes:     make([]time.Duration, 0, cm.cfg.Laps),
-			LapSpeeds:    make([]float64, 0, cm.cfg.Laps),
-			Hits:         make([]bool, TargetsPerFiringLine*cm.cfg.FiringLines),
+			ReportInfo: ReportInfo{
+				CompetitorId: eventInfo.CompetitorId,
+				LapTimes:     make([]time.Duration, 0, cm.cfg.Laps),
+				LapSpeeds:    make([]float64, 0, cm.cfg.Laps),
+				Hits:         make([]bool, TargetsPerFiringLine*cm.cfg.FiringLines),
+			},
 		}
-	case 2:
+	case 2: //Если участник получил время, то считаем его как стартовое, т.к. в тз сказано "Total time includes the difference between scheduled and actual start time"
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		startTime, err := timeParser.ConvertStringToTime(eventInfo.ExtraParams)
 		if err != nil {
@@ -60,9 +56,9 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 
 		competitor.LastLapTime = startTime
 		competitor.StartTime = startTime
-	case 3, 5:
+	case 3, 5: //В целом ничего не требуется в этих случаях
 		return nil
-	case 4:
+	case 4: //Если участние стартанул - надо посчитать, не опоздал ли он на старт, если опоздал - NotStarted статус, пусть подумает о поведении
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		startDeltaDur, err := timeParser.ConvertStringToDuration(cm.cfg.StartDelta)
 		if err != nil {
@@ -72,9 +68,10 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 
 		if diff > startDeltaDur || diff < 0 {
 			competitor.Status = "NotStarted"
-			competitor.TotalTime = startDeltaDur
+			competitor.TotalTime = startDeltaDur //Вот тут не уверен, что нужно было именно такое время, может быть между запланированным и актуальным временем, но а если
+			// он в целом не пришёл на старт?
 		}
-	case 6:
+	case 6: //Просто обрабатываем, в какую мишень попал и сохраняем в мапу Hits, чтобы потом считать промахи/попадания
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		targetNum, err := strconv.Atoi(eventInfo.ExtraParams)
 		if err != nil {
@@ -87,18 +84,18 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 
 		}
 		competitor.Hits[targetNum] = true
-	case 7:
+	case 7: //Закончил стрельбище - сохраним
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		competitor.FiringRangeNum += 1
-	case 8:
+	case 8: //Забежал на штрафные - запомним
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		competitor.PenaltyLapsEnter = eventInfo.EventTime
-	case 9:
+	case 9: //Выбежал со штрафных - посчитаем время, чтобы потом в final report отправить
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		time := eventInfo.EventTime.Sub(competitor.PenaltyLapsEnter)
 
 		competitor.PenaltyTime += time
-	case 10:
+	case 10: //Закончил круг - посчитаем время круга, скорость. Если круг был последним - зафиксируем итоговый результат и статус Finished
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		time, speed := calculateLapStats(competitor.LastLapTime, eventInfo.EventTime, float64(cm.cfg.LapLen))
 		competitor.LapTimes = append(competitor.LapTimes, time)
@@ -112,7 +109,7 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 			return fmt.Errorf("competitor ended more laps than needed")
 		}
 		competitor.LapsEnded += 1
-	case 11:
+	case 11: //Ну тут просто обрабатываем, что человек не закончил гонку(статус и общее время)
 		competitor := cm.competitors[eventInfo.CompetitorId]
 
 		competitor.Status = "NotFinished"
