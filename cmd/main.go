@@ -38,11 +38,15 @@ func main() {
 		line := scanner.Text()
 		eventInfo, err := l.ProcessLine(line)
 		if err != nil {
-			log.Fatalf("LogHandler error: %v", err)
+			log.Fatalf("LogHandler(ProcessLine) error: %v", err)
 		}
 		err = cmptMgr.HandleEvent(eventInfo)
 		if err != nil {
-			log.Fatalf("CompetitorManager error: %v", err)
+			log.Fatalf("CompetitorManager(HandleEvent) error: %v", err)
 		}
+	}
+	err = cmptMgr.GenerateReport()
+	if err != nil {
+		log.Fatalf("CompetitorManager(GenerateReport) error: %v", err)
 	}
 }

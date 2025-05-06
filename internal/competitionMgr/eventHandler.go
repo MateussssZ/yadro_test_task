@@ -3,7 +3,9 @@ package competitionmgr
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
+
 	timeParser "yadro_test/common"
 	"yadro_test/internal/cfg"
 	lh "yadro_test/internal/logger"
@@ -12,38 +14,41 @@ import (
 type CompetitionManager struct {
 	outputFile  *os.File
 	cfg         *cfg.Config
-	competitors map[int]Competitor
+	competitors map[int]*Competitor
 }
 
 type Competitor struct {
+	CompetitorId     int
 	Status           string
 	StartTime        time.Time
 	LastLapTime      time.Time
 	TotalTime        time.Duration
-	lapTimes         []time.Duration
-	lapSpeeds        []float64
-	penaltyTime      time.Duration
-	penaltySpeed     float64
-	hits             map[byte]bool
-	lapsEnded        uint
-	penaltyLapsEnter time.Time
+	LapTimes         []time.Duration
+	LapSpeeds        []float64
+	PenaltyTime      time.Duration
+	PenaltySpeed     float64
+	Hits             []bool
+	LapsEnded        uint
+	PenaltyLapsEnter time.Time
+	FiringRangeNum   int
 }
 
 func NewCompetitionManager(outFile *os.File, cfg *cfg.Config) *CompetitionManager {
 	return &CompetitionManager{
 		outputFile:  outFile,
 		cfg:         cfg,
-		competitors: make(map[int]Competitor, 0),
+		competitors: make(map[int]*Competitor, 0),
 	}
 }
 
 func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 	switch eventInfo.EventId {
 	case 1:
-		cm.competitors[eventInfo.CompetitorId] = Competitor{
-			lapTimes:  make([]time.Duration, 0),
-			lapSpeeds: make([]float64, 0),
-			hits:      map[byte]bool{},
+		cm.competitors[eventInfo.CompetitorId] = &Competitor{
+			CompetitorId: eventInfo.CompetitorId,
+			LapTimes:     make([]time.Duration, 0),
+			LapSpeeds:    make([]float64, 0),
+			Hits:         make([]bool, 5*cm.cfg.FiringLines),
 		}
 	case 2:
 		competitor := cm.competitors[eventInfo.CompetitorId]
@@ -54,7 +59,7 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 
 		competitor.LastLapTime = startTime
 		competitor.StartTime = startTime
-	case 3, 5, 7:
+	case 3, 7:
 		return nil
 	case 4:
 		competitor := cm.competitors[eventInfo.CompetitorId]
@@ -64,36 +69,53 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 		}
 		diff := eventInfo.EventTime.Sub(competitor.LastLapTime)
 
-		if diff > startDeltaDur {
+		if diff > startDeltaDur || diff < 0 {
 			competitor.Status = "NotStarted"
 			competitor.TotalTime = startDeltaDur
 		}
+	case 5:
+		competitor := cm.competitors[eventInfo.CompetitorId]
+		rangeNum, err := strconv.Atoi(eventInfo.ExtraParams)
+		if err != nil {
+			return fmt.Errorf("unable to convert rangeNum to int(%s)", eventInfo.ExtraParams)
+		}
+		competitor.FiringRangeNum = rangeNum - 1
 	case 6:
 		competitor := cm.competitors[eventInfo.CompetitorId]
-		competitor.hits[eventInfo.ExtraParams[0]] = true
+		targetNum, err := strconv.Atoi(eventInfo.ExtraParams)
+		if err != nil {
+			return fmt.Errorf("unable to convert targetNum to int(%s)", eventInfo.ExtraParams)
+		}
+		targetNum = 5*competitor.FiringRangeNum + targetNum - 1
+		maxFiringLines := 5 * cm.cfg.FiringLines
+		if targetNum > maxFiringLines {
+			return fmt.Errorf("target num can`t be more than %d(got %d)", maxFiringLines, targetNum)
+
+		}
+		competitor.Hits[targetNum] = true
 	case 8:
 		competitor := cm.competitors[eventInfo.CompetitorId]
-		competitor.penaltyLapsEnter = eventInfo.EventTime
+		competitor.PenaltyLapsEnter = eventInfo.EventTime
 	case 9:
 		competitor := cm.competitors[eventInfo.CompetitorId]
-		penaltyLaps := countPenaltyLaps(competitor.hits)
-		time, speed := calculateLapStats(competitor.penaltyLapsEnter, eventInfo.EventTime, float64(cm.cfg.PenaltyLen*penaltyLaps))
+		time := eventInfo.EventTime.Sub(competitor.PenaltyLapsEnter)
 
-		competitor.penaltyTime = time
-		competitor.penaltySpeed = speed
+		competitor.PenaltyTime += time
 	case 10:
 		competitor := cm.competitors[eventInfo.CompetitorId]
 		time, speed := calculateLapStats(competitor.LastLapTime, eventInfo.EventTime, float64(cm.cfg.LapLen))
-		competitor.lapTimes = append(competitor.lapTimes, time)
-		competitor.lapSpeeds = append(competitor.lapSpeeds, speed)
+		competitor.LapTimes = append(competitor.LapTimes, time)
+		competitor.LapSpeeds = append(competitor.LapSpeeds, speed)
+		competitor.LastLapTime = eventInfo.EventTime
 
-		if competitor.lapsEnded == uint(cm.cfg.Laps)-1 {
+		if competitor.LapsEnded == uint(cm.cfg.Laps)-1 {
 			competitor.Status = "Finished"
-			competitor.TotalTime = calculateTotalTime(competitor.StartTime, competitor.lapTimes)
-			competitor.lapsEnded += 1
-		} else if competitor.lapsEnded == uint(cm.cfg.Laps) {
+			competitor.TotalTime = calculateTotalTime(competitor.StartTime, competitor.LapTimes)
+			competitor.LapsEnded += 1
+		} else if competitor.LapsEnded == uint(cm.cfg.Laps) {
 			return fmt.Errorf("competitor ended more laps than needed")
 		}
+		competitor.LapsEnded += 1
 	case 11:
 		competitor := cm.competitors[eventInfo.CompetitorId]
 
@@ -103,18 +125,7 @@ func (cm CompetitionManager) HandleEvent(eventInfo lh.EventInfo) error {
 	return nil
 }
 
-func calculateLapStats(startTime, endTime time.Time, distanceMeters float64) (time.Duration, float64) {
-	var duration time.Duration
-	var speedMps float64
-	duration = endTime.Sub(startTime)
-
-	if duration > 0 {
-		speedMps = distanceMeters / duration.Seconds()
-	}
-	return duration, speedMps
-}
-
-func countPenaltyLaps(hits map[byte]bool) int {
+func countMisses(hits []bool) int {
 	count := 0
 	for _, v := range hits {
 		if !v {
@@ -122,6 +133,12 @@ func countPenaltyLaps(hits map[byte]bool) int {
 		}
 	}
 	return count
+}
+
+func calculateLapStats(startTime, endTime time.Time, distanceMeters float64) (time.Duration, float64) {
+	duration := endTime.Sub(startTime)
+	speedMps := computeAvgSpeed(duration, distanceMeters)
+	return duration, speedMps
 }
 
 func calculateTotalTime(startTime time.Time, lapTimes []time.Duration) time.Duration {

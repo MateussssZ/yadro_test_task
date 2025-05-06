@@ -24,3 +24,15 @@ func ConvertStringToDuration(t string) (time.Duration, error) {
 		time.Duration(parsed.Minute())*time.Minute +
 		time.Duration(parsed.Second())*time.Second, nil
 }
+
+func ConvertDurationToString(dur time.Duration) string {
+	dur = dur.Round(time.Millisecond) // Округляем до миллисекунд
+	h := dur / time.Hour
+	dur -= h * time.Hour
+	m := dur / time.Minute
+	dur -= m * time.Minute
+	s := dur / time.Second
+	dur -= s * time.Second
+	ms := dur / time.Millisecond
+	return fmt.Sprintf("%02d:%02d:%02d.%03d", h, m, s, ms)
+}
